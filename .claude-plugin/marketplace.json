@@ -1,0 +1,17 @@
+{
+  "name": "codebase-scribe-local",
+  "owner": {
+    "name": "Tommaso Bagassi"
+  },
+  "plugins": [
+    {
+      "name": "codebase-scribe",
+      "description": "Generate, enrich, and maintain agentic development documentation for any codebase",
+      "version": "0.1.0",
+      "source": "./",
+      "author": {
+        "name": "Tommaso Bagassi"
+      }
+    }
+  ]
+}
