@@ -224,7 +224,7 @@ For draft/maintain: append new topic links only.
 
 ### Step 12: Summary
 
-Print: mode, branch, topics worked, budget used, scores table, contradictions count, suggested next action.
+Print: mode, branch, topics worked, budget used, scores table, contradictions count, standard files status (created / updated / skipped for README.md, CONTRIBUTING.md, ARCHITECTURE.md), suggested next action.
 
 Suggested next actions by mode:
 - After **seed/discover**: "Run `/codebase-scribe` again to draft content for the stubs."

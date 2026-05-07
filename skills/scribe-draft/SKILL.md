@@ -348,3 +348,126 @@ After all topics are drafted, regenerate `docs/agents/STATUS.md` (full overwrite
 
 If during analysis you discover the topic structure was wrong (e.g., a `services/` directory doesn't contain independent services), propose a revision:
 > "During analysis I found [observation]. I recommend merging `services.md` into `architecture.md`. Proceed?"
+
+## Standard Files
+
+After all topics are processed and STATUS.md is regenerated, check that the repo's four required standard files exist and have substantive content. Run this block once per draft invocation, not per topic.
+
+### Step A: Classify each standard file
+
+For each of `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md` at the repo root (AGENTS.md is already managed by the orchestrator — skip it here):
+
+1. Check if the file exists.
+2. If it exists, read it and count its lines.
+3. Classify:
+   - **Missing** — file does not exist.
+   - **Thin** — exists but fewer than 50 lines, OR content is clearly a placeholder (e.g., only a heading, "TODO", a single sentence, or boilerplate with no project-specific content).
+   - **Substantive** — exists with ≥ 50 lines of real, non-placeholder content. **Skip entirely — no prompt, no changes.**
+
+### Step B: Ask the user for each missing or thin file
+
+For each file classified as missing or thin, ask via AskUserQuestion **one at a time, sequentially** (do not batch). Prompt order: README.md → CONTRIBUTING.md → ARCHITECTURE.md.
+
+Question: `"README.md is [missing / thin (~N lines)]. Should I generate it?"`
+
+Options:
+1. `"Yes — generate README.md"` — description: "I'll draft content based on the codebase and context already loaded."
+2. `"No — skip README.md"` — description: "Leave this file as-is."
+
+Wait for each answer before asking about the next file. If the user selects "Yes", generate and write the file (Step C). If "No", skip and move on.
+
+### Step C: Generate each approved file
+
+Use only context already in scope — source files read during topic drafting, AGENTS.md, build config files read in Phase 0, and `.claims.yml`. Do **not** read additional source files; stay within the session budget.
+
+---
+
+**README.md**
+
+```markdown
+# <Project Name>
+
+<1-3 sentence description pulled from AGENTS.md or existing README.>
+
+## Quick Start
+
+<Minimal build/run commands from Makefile, package.json, Cargo.toml, etc. already read.>
+
+## Documentation
+
+<Links to docs/agents/ topic files that exist. Include one-line description per link.>
+
+- [AGENTS.md](AGENTS.md) — quick reference hub for commands and architecture overview
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+```
+
+- Pull project name and description from AGENTS.md identity section, or from a thin existing README.
+- Pull commands from build files already read. If none were read, note "See Makefile / package.json for build commands."
+- Link to topic files in `docs/agents/` that exist. Use each topic's blockquote TL;DR as the link description.
+- Keep to 30–80 lines.
+
+---
+
+**CONTRIBUTING.md**
+
+```markdown
+# Contributing
+
+## Development Setup
+
+<Steps to set up a local dev environment, derived from build files already read.>
+
+## Running Tests
+
+<Test commands from Makefile, package.json, etc.>
+
+## Submitting Changes
+
+1. Fork the repo and create a branch from `main`.
+2. Make your changes with tests where applicable.
+3. Run tests and ensure they pass.
+4. Open a pull request with a clear description of what changed and why.
+
+## Code Style
+
+<Language-specific conventions observed in source files, e.g. gofmt/golangci-lint, eslint/prettier, ruff.>
+```
+
+- Extract setup and test commands from build files already read. If a CI config was observed, note it.
+- Note any linters or formatters if their config files were visible during source reading.
+- Keep to 40–80 lines.
+
+---
+
+**ARCHITECTURE.md**
+
+`ARCHITECTURE.md` is a **thin navigation hub** — it does not duplicate content. All real architecture detail lives in `docs/agents/`.
+
+```markdown
+# Architecture
+
+> This file is a navigation index. For detailed documentation, follow the links below.
+
+## Documentation Index
+
+- [<Topic Title>](docs/agents/<name>.md) — <TL;DR blockquote from the topic file>
+- ...
+
+## Quick Reference
+
+See [AGENTS.md](AGENTS.md) for commands, build instructions, and a directory overview.
+```
+
+Rules for ARCHITECTURE.md:
+- List topic files that cover architectural concerns: architecture, patterns, data model, API surface, core logic. Skip purely operational topics (build-deploy, testing) unless they have architectural significance.
+- Pull each TL;DR from the topic file's blockquote (first line after `#` heading). If the topic is still a stub, use its description instead.
+- If no topic files exist yet, create the file with placeholder links (`docs/agents/architecture.md`) — they will become valid after drafting completes.
+- **Never write prose architecture content in this file.** All substantive content lives in `docs/agents/`.
+- Target < 30 lines total.
+
+### Step D: Record outcome
+
+After Standard Files completes, note which files were created, updated, or skipped. This is reported in the orchestrator's Step 12 summary.
