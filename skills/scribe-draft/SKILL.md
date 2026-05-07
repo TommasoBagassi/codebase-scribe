@@ -361,8 +361,8 @@ For each of `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md` at the repo root (
 2. If it exists, read it and count its lines.
 3. Classify:
    - **Missing** — file does not exist.
-   - **Thin** — exists but fewer than 50 lines, OR content is clearly a placeholder (e.g., only a heading, "TODO", a single sentence, or boilerplate with no project-specific content).
-   - **Substantive** — exists with ≥ 50 lines of real, non-placeholder content. **Skip entirely — no prompt, no changes.**
+   - **Thin** — exists but fewer than 30 lines, OR passes the line threshold but lacks project-specific detail: no commands, no links, no named components — only a title, generic prose, or placeholder text (e.g., "TODO", "Coming soon", a single sentence, boilerplate unchanged from a template).
+   - **Substantive** — exists with ≥ 30 lines AND contains at least one concrete signal of project-specific content (a command, a link, a named file or component, a real description beyond a single sentence). **Skip entirely — no prompt, no changes.**
 
 ### Step B: Ask the user for each missing or thin file
 
