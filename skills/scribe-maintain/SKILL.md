@@ -191,7 +191,38 @@ After all maintenance checks, regenerate `docs/agents/STATUS.md` (full overwrite
 2. Read `.claims.yml` for claim counts and any contradictions
 3. Write STATUS.md with: topic table (Topic, Fresh, Human, Complete, Claims, File), stale flags section, contradictions section
 
-### 12. Summary
+### 12. Standard Files Maintenance
+
+After all topic maintenance is complete, check the three human-facing root files for drift. Run this block once per maintain invocation.
+
+#### A. Check each standard file
+
+For each of `README.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md` at the repo root:
+
+1. Check if the file exists. If it doesn't, note it as missing in the summary — do not create it (creation belongs to draft mode).
+2. If it exists, read it.
+
+#### B. Per-file drift checks
+
+**README.md and CONTRIBUTING.md:**
+
+Check for mechanical drift only — do not rewrite prose:
+- **Broken links:** For every link to a `docs/agents/` file, check it resolves. If a linked topic file was renamed, auto-fix the link and note it. If it was deleted, flag it.
+- **Stale commands:** For any command shown (build, test, run), check it still appears in the build files (Makefile, package.json, etc.). If a command is no longer present, flag it for human review — do not auto-fix commands since the intent may have changed.
+- **Missing topic links:** If new topic files exist in `docs/agents/` that aren't linked from README.md, note them in the summary as candidates to add.
+
+**ARCHITECTURE.md:**
+
+Since this file is a pure navigation index, maintenance is straightforward:
+- For every `docs/agents/` link it contains, check it resolves. Auto-fix renamed files, flag deleted ones.
+- If new topic files exist in `docs/agents/` that aren't listed, auto-add them using the topic's blockquote TL;DR as the description.
+- If a topic's TL;DR blockquote changed since ARCHITECTURE.md was last written, update the description line.
+
+#### C. Report outcome
+
+Include in the Step 13 summary: which files were checked, what was auto-fixed, and what was flagged for human review.
+
+### 13. Summary
 
 Print a summary:
 - Topics checked: N
@@ -201,4 +232,5 @@ Print a summary:
 - Stale flags demoted: [list]
 - Contradictions found: [list]
 - Quality issues: [list]
+- Standard files: [auto-fixes applied] / [flags raised] / [missing files noted]
 - Suggested next action

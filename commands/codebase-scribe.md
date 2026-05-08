@@ -216,7 +216,7 @@ Write `.scribe/session.json`: version `1.0`, branch, `last_active_sha`, `last_ac
 
 **Check every run.** If all topics are `complete` AND AGENTS.md doesn't link to `docs/agents/` yet:
 1. Ask user: "All topics drafted. Replace AGENTS.md with a clean hub? Original saved as AGENTS.md.backup."
-2. If approved: rename to `.backup`, write clean hub (Project Identity, Quick Reference, Architecture at a Glance, Documentation links, Conventions)
+2. If approved: rename to `.backup`, write clean hub (Project Identity, Quick Reference, Architecture at a Glance, Documentation links, Conventions). In the "Architecture at a Glance" section include a line: `> For the full architecture index, see [ARCHITECTURE.md](ARCHITECTURE.md).`
 
 For seed mode (no existing AGENTS.md): discover already created the hub. Append links for newly drafted topics.
 
@@ -224,7 +224,7 @@ For draft/maintain: append new topic links only.
 
 ### Step 12: Summary
 
-Print: mode, branch, topics worked, budget used, scores table, contradictions count, suggested next action.
+Print: mode, branch, topics worked, budget used, scores table, contradictions count, standard files status (created / updated / skipped for README.md, CONTRIBUTING.md, ARCHITECTURE.md), suggested next action.
 
 Suggested next actions by mode:
 - After **seed/discover**: "Run `/codebase-scribe` again to draft content for the stubs."
