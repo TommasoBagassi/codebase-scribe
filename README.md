@@ -20,7 +20,9 @@ The plugin operates in three modes, automatically selected based on documentatio
 |------|------|-------------|
 | **Seed** | No docs exist | Scans repo structure, proposes topics, creates documentation stubs |
 | **Draft** | Stubs or thin docs exist | Reads source code, fills stubs with content, extracts claims |
-| **Maintain** | Docs are current | Detects drift between code and docs, auto-fixes broken references, flags semantic changes |
+| **Maintain** | Docs are current | Detects drift between code and docs, auto-fixes broken references, flags changes for review |
+
+After each Draft or Maintain run, a **Review gate** automatically verifies documentation accuracy using a separate review agent (see [Documentation Review](#documentation-review) below).
 
 ## Installation
 
@@ -144,6 +146,22 @@ The plugin captures design decisions and architectural rationale alongside auto-
 **Over time**, the Human Input score in STATUS.md tracks how much of each topic has human knowledge behind it, increasing naturally as you engage with the documentation.
 
 Design decisions are tracked in `.claims.yml` with provenance — the maintain mode detects when code changes might invalidate a recorded decision and flags it for your review on the next run.
+
+## Documentation Review
+
+Every documentation change goes through a quality gate powered by a separate review agent:
+
+**Automatic review** — After drafting or maintenance, a fresh-session review agent verifies documentation against source code. It checks file path existence, function name accuracy, behavioral claims, and coverage gaps.
+
+**Two-pass verification:**
+- **Mechanical pass** — High-confidence filesystem checks (does this path exist? does this function exist?)
+- **Semantic pass** — Lower-confidence content verification (does the doc accurately describe what the code does?)
+
+**Human gate** — For large changes (new drafts, major rewrites) or autonomous runs, the review report is presented for human approval before finalizing.
+
+**Rework loop** — If the review finds critical errors, the drafting skill automatically corrects them and re-submits for review (hard cap: 2 iterations).
+
+Review is enabled by default. Disable with `review.enabled: false` in `.scribe.yml`.
 
 ## Commands
 
@@ -333,6 +351,17 @@ drift:
   stale_commit_threshold: 50   # Commits before demoting stale flags
   decision_lines_threshold: 5  # Lines changed before flagging decision drift
 
+# Review system
+review:
+  enabled: true                  # Enable/disable review after draft and maintain
+  diff_threshold: 20             # Lines changed to trigger review via safety net
+  auto_trigger:                  # Change types that always trigger review
+    - new_draft
+    - major_rewrite
+    - claim_change
+    - section_change
+    - large_diff
+
 # Branching
 branching_strategy: main-only  # main-only | branch-local | branch-commit
 
@@ -363,7 +392,7 @@ The maintain mode detects two types of drift:
 
 **Mechanical drift** (auto-fixed): Renamed files, renamed functions, changed commands. The plugin fixes these automatically and tells you what changed.
 
-**Semantic drift** (flagged for review): Architecture changes, deprecated patterns, deleted components. The plugin flags these for human review.
+**Semantic drift** (handled by review agent): Architecture changes, deprecated patterns, deleted components. The maintain mode flags major drift, and the review agent performs thorough verification against source code.
 
 Drift attention is proportional to code churn — stable code gets zero prompts.
 

@@ -25,6 +25,54 @@ You receive from the orchestrator:
 
 Read `.scribe.yml` if it exists for budget and content settings.
 
+## Rework Mode
+
+When the orchestrator passes a rework brief (containing `rework: true`), you operate in **rework mode** — a targeted-edit pipeline that differs from normal drafting.
+
+### Rework Brief Contents
+
+You receive from the orchestrator:
+- `rework: true` — the mode flag
+- `iteration` — rework iteration count (1 or 2)
+- The current topic file content (post-review)
+- A list of critical findings (each with: tag, location in doc, evidence, suggestion)
+- The source files cited in findings' evidence fields
+
+### Rework Pipeline
+
+When `rework: true` is set, follow this pipeline instead of the normal Per-Topic Workflow:
+
+1. **Parse findings.** Read the critical findings list. For each finding, identify the section and content that needs correction.
+
+2. **Read cited source files.** Read ONLY the source files referenced in findings' evidence fields. Do not read the full watch_paths — rework is scoped to the flagged issues.
+
+3. **Apply targeted edits.** For each critical finding:
+   - `MISSING_REF`: Find the correct path (check `git log --diff-filter=R` for renames, `find` for relocated files) and update the reference.
+   - `CONTRADICTION`: Read the cited source lines, understand the actual behavior, and rewrite the contradicting statement to match the code.
+   - `INCONSISTENCY`: Read both contradicting sections and resolve the contradiction — pick the one that matches source code.
+   - `WRONG_FILE`: Find the correct file for the pattern and update the attribution.
+   - `DEPRECATED`: Remove or update the reference. If the pattern has a replacement, document the replacement instead.
+
+4. **Preserve unaffected content.** Do NOT rewrite sections that have no findings against them. Change only what the findings require.
+
+5. **Skip all questions.** Do not ask design decision questions (section 6: Design Decision Prompt) or focus mode questions (section 7: Observation-Driven Questioning). Rework is mechanical correction, not enrichment.
+
+6. **Update freshness only.** Set `freshness: 100`. Do NOT recalculate `human_input` or `completeness` — those reflect the original draft, not the rework.
+
+7. **Re-extract claims for changed sections.** Read `.claims.yml`. For sections you modified, re-extract claims using the same ID stability rules as section 11 (Extract Claims). Preserve all claims for sections you did not modify.
+
+8. **Validate output.** Run the same checklist as section 12 (Validate Output): 5 headings, TL;DR, scores, claims.
+
+9. **Save session progress.** Mark topic as `rework_pass_<iteration>` in session.json.
+
+### What Rework Does NOT Do
+
+- Does not read the full watch_paths (only cited files)
+- Does not ask design decision or SME questions
+- Does not recalculate human_input or completeness scores
+- Does not propose splits or structural revisions
+- Does not run the wrap-up pass
+
 ## File Skipping Rules
 
 Skip these files -- never read them, they don't count against your budget:
@@ -470,4 +518,21 @@ Rules for ARCHITECTURE.md:
 
 ### Step D: Record outcome
 
-After Standard Files completes, note which files were created, updated, or skipped. This is reported in the orchestrator's Step 12 summary.
+After Standard Files completes, note which files were created, updated, or skipped. This is reported in the orchestrator's Step 13 summary.
+
+### Review Gate
+
+**Skip this section when in rework mode** — the orchestrator handles scoped re-review via Step 9d.
+
+**After all topics in this batch are drafted, STATUS.md regenerated, and Standard Files processed, you MUST run the review orchestration.** This is not optional — do not return to the orchestrator or print a summary without doing this first.
+
+Follow Step 9 (Review Orchestration) from the orchestrator command (`commands/codebase-scribe.md`). For each topic you drafted in this batch:
+
+1. Classify the change (all topics in this batch are `new_draft` if they had `scan: null`, or check the classification rules in Step 9a)
+2. Check the review trigger (Step 9b)
+3. Spawn the `codebase-scribe:scribe-review` skill (NOT code-reviewer or any other plugin) as a fresh-session subagent for each topic that triggers review (Step 9c)
+4. Process the verdict — block+rework for critical findings, annotate for minor (Step 9d)
+5. Check human gate conditions (Step 9e)
+6. Finalize — write review_notes, update scan SHA, regenerate STATUS.md (Step 9f)
+
+Only after the review gate completes for all topics should you return control to the orchestrator.

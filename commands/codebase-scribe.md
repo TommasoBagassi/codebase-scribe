@@ -11,7 +11,7 @@ You are the Codebase Scribe — an agent that generates, enriches, and maintains
 
 Handle every error gracefully — warn and continue with defaults:
 1. **Malformed YAML frontmatter** — treat as stub, warn user
-2. **Invalid .scribe.yml** — fall back to defaults: `output.docs_dir: docs/agents`, `output.agents_md: AGENTS.md`, `branching_strategy: main-only`, `budgets.files_per_topic: 30`, `budgets.files_per_session: 150`, `budgets.topics_per_run: 3`, `drift.sensitivity: medium`, `drift.decision_lines_threshold: 5`
+2. **Missing or invalid .scribe.yml** — this file is optional. If missing or invalid, silently fall back to defaults: `output.docs_dir: docs/agents`, `output.agents_md: AGENTS.md`, `branching_strategy: main-only`, `budgets.files_per_topic: 30`, `budgets.files_per_session: 150`, `budgets.topics_per_run: 3`, `drift.sensitivity: medium`, `drift.decision_lines_threshold: 5`, `review.enabled: true`, `review.diff_threshold: 20`, `review.auto_trigger: [new_draft, major_rewrite, claim_change, section_change, large_diff]`
 3. **Corrupt .claims.yml** — start with empty claims, warn
 4. **Git unavailable / shallow clone** — skip git-dependent features, warn
 5. **Detached HEAD** — fall back to `main-only` behavior
@@ -25,9 +25,11 @@ Handle every error gracefully — warn and continue with defaults:
 
 ## Phase 0: Orient
 
-### Step 0: Branching strategy
+### Step 0: Branching strategy and autonomy detection
 
 Read `.scribe.yml` `branching_strategy` (default `main-only`). Detect current branch. If `main-only` and on a feature branch, tell user and exit. If `branch-local`, set output to `.scribe/branch-docs/`.
+
+**Autonomous detection:** Check whether this invocation originated from a user prompt containing `/codebase-scribe`. If the skill was invoked via CronCreate, hook, or subagent dispatch (no `/codebase-scribe` in the user's conversation turn), set `autonomous: true` in session state. This flag is used by the human gate in Step 9e.
 
 ### Step 1: Check for first run
 
@@ -113,7 +115,7 @@ After discover completes, tell the user: "Stubs created. Run `/codebase-scribe` 
 
 ### Step 4: Check session state
 
-Read `.scribe/session.json`. Discard if: version != `1.0`, branch mismatch, >7 days old, or HEAD >100 commits past `last_active_sha`. If valid, restore `total_files_read` and per-topic `phase_status`.
+Read `.scribe/session.json`. Discard if: version != `1.0`, branch mismatch, >7 days old, or HEAD >20 commits past `last_active_sha`. If valid, restore `total_files_read` and per-topic `phase_status`.
 
 ### Step 5: Classify topics
 
@@ -122,7 +124,7 @@ For each topic, run `git diff --stat <scan>..HEAD -- <watch_paths>`:
 | Category | Criteria | Priority |
 |----------|----------|----------|
 | `stub` | Body empty/<50 words, or placeholder text, or has `migration_source` | 1 (highest) |
-| `escalated` | completeness == 0 AND has stale_flag with `reason: "escalated"` (set by maintain skill's Step 10) | 2 |
+| `escalated` | completeness == 0 AND has stale_flag with `reason: "escalated"` (set by maintain skill's Step 9) | 2 |
 | `drifted` | watch_paths changed since scan SHA | 3 |
 | `decision_drift` | has stale_flag with `reason: "decision_drift"` and topic is otherwise current | 4 |
 | `undercooked` | completeness < 30 | 5 |
@@ -189,6 +191,15 @@ Otherwise: list top-level directories (excluding node_modules, vendor, .git, dis
 | Unverified topics | 8 | Invoke `scribe-draft` on unverified topics (batched) |
 | All current | 9 | Invoke `scribe-maintain` |
 
+#### Pre-Invocation Snapshots (for review classification)
+
+**Before invoking any skill below**, take snapshots for each topic that will be processed:
+- Copy the topic file content (or note it doesn't exist yet for stubs)
+- Copy the topic's claims from `.claims.yml`
+- Record the topic file's `##` heading list
+
+These snapshots are used by Step 9 (Review Orchestration) to classify changes after the skill returns.
+
 #### Batch Selection (for draft invocations)
 
 Before invoking `scribe-draft`, apply batch limits to prevent context exhaustion:
@@ -199,20 +210,177 @@ Before invoking `scribe-draft`, apply batch limits to prevent context exhaustion
 4. Pass only the batch to `scribe-draft`
 5. Record remaining undrafted topics in session.json with `phase_status: "pending"`
 
-If the batch is smaller than the total topics needing drafting, the Step 12 summary will prompt the user to run again for the next batch.
+If the batch is smaller than the total topics needing drafting, the Step 13 summary will prompt the user to run again for the next batch.
 
-### Step 9: Regenerate STATUS.md (fallback)
+### Step 9: Review Orchestration
+
+**This step is invoked by the draft and maintain skills at the end of their execution** (see "Review Gate" section in each skill). The skills reference the substeps below directly.
+
+Skip this step entirely if `review.enabled` is `false` in `.scribe.yml`.
+
+#### 9a: Classify each topic's changes
+
+After the skill returns, for each topic that was modified, compare the topic file against the pre-invocation snapshots taken in Step 8. Apply the following checks top-to-bottom (first match wins):
+
+1. **Stub check** — if the topic's pre-skill frontmatter had `scan: null`, classify as `new_draft`
+2. **Line-count diff** — count changed lines in the topic file. If >50% of the file's total lines changed, classify as `major_rewrite`
+3. **Claim comparison** — diff the topic's claims from `.claims.yml` against the pre-skill snapshot. If claims differ, classify as `claim_change`
+4. **Heading comparison** — parse `##` headings before and after. If the heading list changed, classify as `section_change`
+5. **Diff threshold** — if changed lines exceed `review.diff_threshold` (default: 20), classify as `large_diff`
+6. **Otherwise** — classify as `minor_mechanical`
+
+#### 9b: Check trigger
+
+Read `review.auto_trigger` from `.scribe.yml` (default: `[new_draft, major_rewrite, claim_change, section_change, large_diff]`).
+
+- If the topic's classification is in `auto_trigger` → trigger review
+- If the topic's classification is NOT in `auto_trigger` (typically `minor_mechanical`) → present opt-in prompt:
+
+```
+Review trigger did not fire for this change.
+Classified as: <classification> (<N> lines changed).
+
+Changes since last scan:
+<mini-diff from git diff --stat>
+
+Options:
+1. Skip review (trust the change)
+2. Run semantic review
+3. Review specific files only
+```
+
+Use AskUserQuestion to present this.
+
+- If the user selects **option 1** (skip): move to the next topic.
+- If the user selects **option 2** (full review): proceed to 9c with the full brief.
+- If the user selects **option 3** (specific files): ask a follow-up AskUserQuestion listing the changed files so the user can select which ones to review. Build the review brief with only the selected files in `source_files`, and scope Pass 2 to sections that reference those files.
+
+#### 9c: Spawn review subagent
+
+For each topic that triggers review, spawn the `codebase-scribe:scribe-review` skill (NOT code-reviewer or any other plugin) as a **fresh-session subagent** using the Agent tool. Build the brief:
+
+```yaml
+topic_name: <name>
+topic_content: <full content of the topic file>
+watch_paths: <from topic frontmatter>
+source_files:
+  <prioritized list, capped at budgets.files_per_topic>
+  Priority: (1) files referenced in claims, (2) files in the triggering diff,
+  (3) files referenced in topic content, (4) remaining by size ascending
+  Files over 500 lines: include excerpts (exported symbols, key functions)
+claims:
+  <all claims for this topic from .claims.yml>
+change_classification: <from 9a>
+change_summary: <one-line description of what changed>
+```
+
+Pass this brief as the subagent's prompt along with an instruction to follow the review protocol in `skills/scribe-review/SKILL.md` and the adversarial prompt in `skills/prompts/review-adversarial.md`.
+
+#### 9d: Process verdict
+
+Parse the `## Verdict:` line from the subagent's response. If the line is missing or unparseable, treat as `REWORK_NEEDED`.
+
+**If `PASS` or `PASS_WITH_ANNOTATIONS`:**
+
+For `PASS_WITH_ANNOTATIONS`, extract minor and unverifiable findings from the report.
+
+Then check whether the human gate (9e) should fire: if the run is autonomous, the change is `new_draft` or `major_rewrite`, proceed to 9e before finalizing. Otherwise, proceed directly to finalize (9f).
+
+**If `REWORK_NEEDED`:**
+
+1. Extract critical findings from the report
+2. Re-invoke the `scribe-draft` skill in rework mode, passing:
+   - `rework: true`
+   - `iteration: 1`
+   - The current topic file content
+   - The critical findings list
+   - The source files cited in findings
+3. After rework completes, re-extract claims and spawn another review subagent (scoped re-review):
+   - Include `previous_findings` from the last review
+   - Include `rework_iteration: 1`
+   - Include `changed_sections` (sections modified by rework)
+4. If the re-review still returns `REWORK_NEEDED`:
+   - **Same finding persists** → escalate to human (9e)
+   - **New critical findings** → escalate to human immediately (9e)
+   - **Different findings, iteration < 2** → rework again (iteration 2), then re-review
+   - **Iteration >= 2** → escalate to human (9e)
+5. If the re-review returns `PASS` or `PASS_WITH_ANNOTATIONS` → check human gate conditions (9e), then finalize (9f)
+
+#### 9e: Human gate
+
+The human gate fires when any of these conditions apply:
+1. The change was autonomous (see autonomous detection below)
+2. The change classification is `new_draft` or `major_rewrite`
+3. The rework loop exhausted its 2-iteration cap
+
+**Precedence:** If multiple conditions apply, use the highest-numbered case's option set. For example, if the run is autonomous (case 1) AND the rework cap is exhausted (case 3), use the case 3 options (which omit "Request changes").
+
+**Autonomous detection:** Check whether the current invocation originated from a user prompt containing `/codebase-scribe`. If the skill was invoked via CronCreate, hook, or subagent dispatch (no `/codebase-scribe` in the user's conversation turn), the run is autonomous.
+
+Present the full review report to the user via AskUserQuestion.
+
+**For cases 1-2 (change size or autonomy):**
+
+Options:
+1. "Approve — finalize with annotations"
+2. "Request changes — describe what to fix"
+3. "Override — approve despite findings"
+
+If "Request changes": run rework cycle (counts toward 2-iteration cap).
+
+**For case 3 (rework cap exhausted):**
+
+Options:
+1. "Approve as-is — accept with unresolved findings"
+2. "Override — approve with findings logged"
+3. "Provide manual fix — I'll describe what to change"
+
+If "Provide manual fix": pass the user's instructions to scribe-draft in rework mode as a one-shot (no further review — the user owns the outcome).
+
+"Request changes" is NOT offered when the cap is exhausted.
+
+#### 9f: Finalize
+
+When a topic passes review (or is approved/overridden):
+
+1. Write `review_notes` to topic frontmatter (minor + unverifiable findings from the review report):
+   ```yaml
+   scribe:
+     review_notes:
+       - finding: "<description>"
+         severity: minor | unverifiable
+         tag: <TAG>
+         confidence: <0.0-1.0>
+         date: <today>
+   ```
+   Review notes are cleared and regenerated each review pass. If no review ran, existing notes persist.
+
+2. For overrides, also write:
+   ```yaml
+   scribe:
+     review_override:
+       date: <today>
+       unresolved_critical: <count>
+       reason: "User override — findings accepted as known limitations"
+   ```
+
+3. Update `scan` SHA to current HEAD
+4. Update `freshness: 100`
+5. Mark topic as `complete` in session.json
+6. Regenerate `docs/agents/STATUS.md` with updated scores, stale flags, and review notes
+
+### Step 10: Regenerate STATUS.md (fallback)
 
 The draft and maintain skills each regenerate STATUS.md as their final step. If you reach this step and STATUS.md is already up to date, skip it. Otherwise:
 1. Read all topic frontmatter
 2. Read `.claims.yml` for claim counts and contradictions
 3. Write `docs/agents/STATUS.md` (full overwrite): topic table (Topic, Fresh, Human, Complete, Claims, File), stale flags section, contradictions section
 
-### Step 10: Update session.json
+### Step 11: Update session.json
 
 Write `.scribe/session.json`: version `1.0`, branch, `last_active_sha`, `last_active_time`, `current_phase`, `total_files_read`, per-topic `{phase_status, files_read}`.
 
-### Step 11: AGENTS.md hub management
+### Step 12: AGENTS.md hub management
 
 **Check every run.** If all topics are `complete` AND AGENTS.md doesn't link to `docs/agents/` yet:
 1. Ask user: "All topics drafted. Replace AGENTS.md with a clean hub? Original saved as AGENTS.md.backup."
@@ -222,7 +390,7 @@ For seed mode (no existing AGENTS.md): discover already created the hub. Append 
 
 For draft/maintain: append new topic links only.
 
-### Step 12: Summary
+### Step 13: Summary
 
 Print: mode, branch, topics worked, budget used, scores table, contradictions count, standard files status (created / updated / skipped for README.md, CONTRIBUTING.md, ARCHITECTURE.md), suggested next action.
 

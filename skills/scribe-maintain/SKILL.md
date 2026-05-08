@@ -1,16 +1,16 @@
 ---
 name: scribe-maintain
-description: Use when all documentation topics are current or lightly drifted. Detects mechanical and semantic drift, auto-fixes broken references, flags stale content, validates cross-topic consistency, and recalculates scores.
+description: Use when all documentation topics are current or lightly drifted. Detects mechanical and decision drift, auto-fixes broken references, flags stale content for review, validates cross-topic consistency, and recalculates scores. Semantic drift evaluation is handled by the review subagent.
 ---
 
 # Scribe Maintain — Phase 3
 
-You are running Phase 3 (Maintain) of the codebase-scribe documentation system. Your job is to detect drift between documentation and code, auto-fix mechanical issues, flag semantic drift for human review, check cross-topic consistency, and recalculate scores.
+You are running Phase 3 (Maintain) of the codebase-scribe documentation system. Your job is to detect drift between documentation and code, auto-fix mechanical issues, flag major drift and decision drift for review, check cross-topic consistency, and recalculate scores. Semantic drift evaluation is handled by the review subagent (scribe-review).
 
 ## Safety Rules
 
 1. **Mechanical drift:** Auto-fix broken file paths and function names. Always produce a summary of what you changed.
-2. **Semantic drift:** Never auto-fix. Flag for human review only.
+2. **Semantic drift:** Maintain does not evaluate semantic drift — that is handled by the review subagent (scribe-review). Maintain only flags major churn for review.
 3. **Deletions are always semantic:** If a referenced file or function was deleted, flag it — never silently remove the reference.
 4. Never modify AGENTS.md
 5. Never delete content from topic files — only update references and frontmatter
@@ -49,7 +49,7 @@ Calculate churn: (files changed / total files in watch_paths) x 100
 | No | No | Mechanical drift. Auto-fix if possible, flag deletions. |
 | Yes, minor (< minor threshold) | Yes | Light check. Skim the diff summary. Usually no action needed. |
 | Yes, minor | No | Mechanical drift. Auto-fix broken references. |
-| Yes, major (> major threshold) | Either | Semantic drift likely. Flag for review. |
+| Yes, major (> major threshold) | Either | Major drift. Flag for review — semantic evaluation handled by review subagent. |
 
 ### 3. Reference Validation
 
@@ -73,11 +73,7 @@ stale_flags:
 
 Reason categories: `"deleted"` (file/function removed), `"renamed"` (auto-fixed but flagged), `"semantic"` (code behavior changed), `"escalated"` (60%+ broken references, needs full redraft).
 
-### 4. Semantic Drift Flagging
-
-For topics with major churn, read the changed files and compare against the topic's documented claims. If the code's behavior has materially changed from what the docs describe, add a stale flag.
-
-### 5. Decision Drift Detection
+### 4. Decision Drift Detection
 
 For claims in `.claims.yml` with `provenance.origin: user`, check whether the claim's `source` file changed since the claim was recorded:
 
@@ -102,7 +98,7 @@ stale_flags:
 
 Report in the summary: "N decision drift flag(s) raised. These will be addressed in the next draft or focus run."
 
-### 6. Stale Flag Lifecycle
+### 5. Stale Flag Lifecycle
 
 For existing stale flags in frontmatter:
 - Calculate commit distance: `git rev-list --count <flagged_at_sha>..HEAD`
@@ -111,7 +107,7 @@ For existing stale flags in frontmatter:
 - **Keep active** when: watch_paths are still changing (code is actively evolving, stale docs are a real problem)
 - Surface active flags to the user: "These sections may be outdated: [list]"
 
-### 7. Cross-Topic Consistency
+### 6. Cross-Topic Consistency
 
 #### Reference Consistency
 When two topic files reference the same file path or function, check they describe it consistently (same purpose, same behavior). Flag inconsistencies.
@@ -140,7 +136,7 @@ contradictions:
     claim_b: {id: pat-http, claim: "HTTP client wrapper for service calls"}
 ```
 
-### 8. Quality Checks
+### 7. Quality Checks
 
 Run these on every maintain pass:
 
@@ -154,7 +150,7 @@ Run these on every maintain pass:
 **Structural diff:** Compare the repo's top-level directory structure against documented topics. If a significant directory exists that isn't covered by any topic's watch_paths, note it:
 > "Directory `pkg/newmodule/` exists but isn't covered by any documentation topic. Consider running `/codebase-scribe` to add a topic for it."
 
-### 9. Recalculate Scores
+### 8. Recalculate Scores
 
 For each topic:
 
@@ -166,7 +162,7 @@ For each topic:
 
 Update scores in the topic file's frontmatter. Update `scan` SHA to current HEAD if changes were made.
 
-### 10. Escalation
+### 9. Escalation
 
 If a section has 60%+ of its referenced files no longer existing, escalate:
 > "Section '[heading]' in [topic].md has 60%+ broken references. This section needs a full redraft. Recommend running `/codebase-scribe` again to regenerate it."
@@ -184,14 +180,14 @@ stale_flags:
 ```
 3. Update session state with `phase_status: "needs_redraft"` for this topic
 
-### 11. Regenerate STATUS.md
+### 10. Regenerate STATUS.md
 
 After all maintenance checks, regenerate `docs/agents/STATUS.md` (full overwrite):
 1. Read all topic files' frontmatter for current scores
 2. Read `.claims.yml` for claim counts and any contradictions
 3. Write STATUS.md with: topic table (Topic, Fresh, Human, Complete, Claims, File), stale flags section, contradictions section
 
-### 12. Standard Files Maintenance
+### 11. Standard Files Maintenance
 
 After all topic maintenance is complete, check the three human-facing root files for drift. Run this block once per maintain invocation.
 
@@ -222,15 +218,30 @@ Since this file is a pure navigation index, maintenance is straightforward:
 
 Include in the Step 13 summary: which files were checked, what was auto-fixed, and what was flagged for human review.
 
+### 12. Review Gate
+
+**After all maintenance checks, STATUS.md regeneration, and Standard Files Maintenance, you MUST run the review orchestration** for any topics that were modified (mechanical fixes, re-extracted claims, etc.). This is not optional.
+
+Follow Step 9 (Review Orchestration) from the orchestrator command (`commands/codebase-scribe.md`). For each topic modified during this maintain pass:
+
+1. Classify the change using the rules in Step 9a
+2. Check the review trigger (Step 9b)
+3. If triggered: spawn the `codebase-scribe:scribe-review` skill (NOT code-reviewer or any other plugin) as a fresh-session subagent (Step 9c)
+4. Process the verdict (Step 9d), check human gate (Step 9e), finalize (Step 9f)
+5. If not triggered: present the opt-in prompt to the user
+
+Only after the review gate completes should you print the summary.
+
 ### 13. Summary
 
 Print a summary:
 - Topics checked: N
 - Mechanical fixes applied: [list]
-- Semantic drift flags raised: [list]
+- Major drift flags raised: [list]
 - Decision drift flags raised: [list]
 - Stale flags demoted: [list]
 - Contradictions found: [list]
 - Quality issues: [list]
 - Standard files: [auto-fixes applied] / [flags raised] / [missing files noted]
+- Review results: [pass/rework/skipped per topic]
 - Suggested next action
