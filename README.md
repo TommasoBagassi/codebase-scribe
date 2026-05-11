@@ -36,8 +36,7 @@ Add the marketplace to your `~/.claude/settings.json`:
     "codebase-scribe": {
       "source": {
         "source": "github",
-        "owner": "TommasoBagassi",
-        "repo": "codebase-scribe"
+        "repo": "TommasoBagassi/codebase-scribe"
       }
     }
   },
@@ -54,68 +53,25 @@ Restart Claude Code. The plugin will be downloaded and available automatically.
 Clone the repo somewhere on your machine:
 
 ```bash
-git clone https://github.com/TommasoBagassi/codebase-scribe.git /path/to/plugins/codebase-scribe
+git clone https://github.com/TommasoBagassi/codebase-scribe.git /path/to/codebase-scribe
 ```
 
-The plugin needs a **marketplace** to be discoverable. You have two options:
-
-**Option A — Create a new marketplace** (if this is your only local plugin):
-
-Create a `.claude-plugin/marketplace.json` in the **parent directory** of the cloned repo:
-
-```bash
-mkdir -p /path/to/plugins/.claude-plugin
-```
-
-```json
-// /path/to/plugins/.claude-plugin/marketplace.json
-{
-  "name": "my-plugins",
-  "owner": { "name": "Your Name" },
-  "plugins": [
-    {
-      "name": "codebase-scribe",
-      "description": "Generate, enrich, and maintain agentic development documentation for any codebase",
-      "source": "./codebase-scribe"
-    }
-  ]
-}
-```
-
-Then add to your `~/.claude/settings.json`:
+The repo ships with its own `.claude-plugin/marketplace.json`, so you just need to point Claude Code at the cloned directory. Add to your `~/.claude/settings.json`:
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "my-plugins": {
+    "codebase-scribe-local": {
       "source": {
         "source": "directory",
-        "path": "/path/to/plugins"
+        "path": "/path/to/codebase-scribe"
       }
     }
   },
   "enabledPlugins": {
-    "codebase-scribe@my-plugins": true
+    "codebase-scribe@codebase-scribe-local": true
   }
 }
-```
-
-**Option B — Add to an existing local marketplace** (if you already have local plugins):
-
-Add an entry to your existing marketplace's `.claude-plugin/marketplace.json`:
-
-```json
-{
-  "name": "codebase-scribe",
-  "description": "Generate, enrich, and maintain agentic development documentation for any codebase",
-  "source": "./codebase-scribe"
-}
-```
-
-Then enable it in `~/.claude/settings.json` under `enabledPlugins`:
-
-```json
-"codebase-scribe@your-marketplace-name": true
 ```
 
 Restart Claude Code.
