@@ -533,7 +533,7 @@ Follow Step 9 (Review Orchestration) from the orchestrator command (`commands/co
 
 1. Classify the change (all topics in this batch are `new_draft` if they had `scan: null`, or check the classification rules in Step 9a)
 2. Check the review trigger (Step 9b)
-3. Spawn the `codebase-scribe:scribe-review` skill (NOT code-reviewer or any other plugin) as a fresh-session subagent for each topic that triggers review (Step 9c)
+3. Invoke the `codebase-scribe:scribe-review` skill using the `Skill` tool (NOT the `Agent` tool, NOT code-reviewer or any other plugin) for each topic that triggers review (Step 9c)
 4. Process the verdict — block+rework for critical findings, annotate for minor (Step 9d)
 5. Check human gate conditions (Step 9e)
 6. Finalize — write review_notes, update scan SHA, regenerate STATUS.md (Step 9f)

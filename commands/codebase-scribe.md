@@ -181,15 +181,17 @@ Otherwise: list top-level directories (excluding node_modules, vendor, .git, dis
 
 | Condition | Priority | Action |
 |-----------|----------|--------|
-| Focus mode active | 1 | Invoke `scribe-draft` on confirmed focus topics only (with focus context: confirmed paths, independent budgets, SME questioning mode) |
-| Stubs exist | 2 | Invoke `scribe-draft` on stubs (batched) |
-| Escalated topics | 3 | Invoke `scribe-draft` on escalated topics (full redraft — clear the escalation stale flag after drafting) |
-| Drifted topics | 4 | Invoke `scribe-draft` on drifted topics (batched) |
-| Decision drift topics | 5 | Invoke `scribe-draft` on topics with decision_drift flags (resolve flags first, then draft if needed) |
-| Undercooked topics | 6 | Invoke `scribe-draft`, prioritize undercooked (batched) |
+| Focus mode active | 1 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-draft"`) on confirmed focus topics only (with focus context: confirmed paths, independent budgets, SME questioning mode) |
+| Stubs exist | 2 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-draft"`) on stubs (batched) |
+| Escalated topics | 3 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-draft"`) on escalated topics (full redraft — clear the escalation stale flag after drafting) |
+| Drifted topics | 4 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-draft"`) on drifted topics (batched) |
+| Decision drift topics | 5 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-draft"`) on topics with decision_drift flags (resolve flags first, then draft if needed) |
+| Undercooked topics | 6 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-draft"`) on undercooked topics (batched) |
 | Uncovered modules | 7 | Go to Step 2 to propose new topics for uncovered areas |
-| Unverified topics | 8 | Invoke `scribe-draft` on unverified topics (batched) |
-| All current | 9 | Invoke `scribe-maintain` |
+| Unverified topics | 8 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-draft"`) on unverified topics (batched) |
+| All current | 9 | Use the `Skill` tool (`skill: "codebase-scribe:scribe-maintain"`) |
+
+**Important:** Always use the `Skill` tool to invoke sub-skills — do NOT spawn a general-purpose `Agent` with a hand-written prompt that replicates the skill's behavior. The `Skill` tool loads and executes the actual skill file, ensuring all its rules (file paths, output format, claims handling, etc.) are followed exactly.
 
 #### Pre-Invocation Snapshots (for review classification)
 
@@ -202,12 +204,12 @@ These snapshots are used by Step 9 (Review Orchestration) to classify changes af
 
 #### Batch Selection (for draft invocations)
 
-Before invoking `scribe-draft`, apply batch limits to prevent context exhaustion:
+Before invoking `scribe-draft` via the `Skill` tool, apply batch limits to prevent context exhaustion:
 
 1. Read `budgets.topics_per_run` from `.scribe.yml` (default: 3)
 2. Within the selected priority tier, sort topics by file count in their watch_paths descending — topics needing the deepest analysis get the freshest LLM context
 3. Take the first `topics_per_run` topics as this batch
-4. Pass only the batch to `scribe-draft`
+4. Pass only the batch as `args` to the `Skill` tool call
 5. Record remaining undrafted topics in session.json with `phase_status: "pending"`
 
 If the batch is smaller than the total topics needing drafting, the Step 13 summary will prompt the user to run again for the next batch.
@@ -257,7 +259,7 @@ Use AskUserQuestion to present this.
 
 #### 9c: Spawn review subagent
 
-For each topic that triggers review, spawn the `codebase-scribe:scribe-review` skill (NOT code-reviewer or any other plugin) as a **fresh-session subagent** using the Agent tool. Build the brief:
+For each topic that triggers review, invoke the `codebase-scribe:scribe-review` skill using the `Skill` tool (NOT the `Agent` tool, NOT code-reviewer or any other plugin). Build the brief and pass it as `args`:
 
 ```yaml
 topic_name: <name>
@@ -274,7 +276,7 @@ change_classification: <from 9a>
 change_summary: <one-line description of what changed>
 ```
 
-Pass this brief as the subagent's prompt along with an instruction to follow the review protocol in `skills/scribe-review/SKILL.md` and the adversarial prompt in `skills/prompts/review-adversarial.md`.
+Pass this brief as the `args` to the `Skill` tool call. The skill will follow the review protocol in `skills/scribe-review/SKILL.md` and the adversarial prompt in `skills/prompts/review-adversarial.md` automatically.
 
 #### 9d: Process verdict
 
@@ -289,13 +291,13 @@ Then check whether the human gate (9e) should fire: if the run is autonomous, th
 **If `REWORK_NEEDED`:**
 
 1. Extract critical findings from the report
-2. Re-invoke the `scribe-draft` skill in rework mode, passing:
+2. Re-invoke the `scribe-draft` skill via the `Skill` tool in rework mode, passing as `args`:
    - `rework: true`
    - `iteration: 1`
    - The current topic file content
    - The critical findings list
    - The source files cited in findings
-3. After rework completes, re-extract claims and spawn another review subagent (scoped re-review):
+3. After rework completes, re-invoke `scribe-review` via the `Skill` tool (scoped re-review), passing as `args`:
    - Include `previous_findings` from the last review
    - Include `rework_iteration: 1`
    - Include `changed_sections` (sections modified by rework)
@@ -335,7 +337,7 @@ Options:
 2. "Override — approve with findings logged"
 3. "Provide manual fix — I'll describe what to change"
 
-If "Provide manual fix": pass the user's instructions to scribe-draft in rework mode as a one-shot (no further review — the user owns the outcome).
+If "Provide manual fix": invoke `scribe-draft` via the `Skill` tool with the user's instructions as rework args — one-shot, no further review (the user owns the outcome).
 
 "Request changes" is NOT offered when the cap is exhausted.
 
