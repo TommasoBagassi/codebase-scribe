@@ -226,7 +226,7 @@ Follow Step 9 (Review Orchestration) from the orchestrator command (`commands/co
 
 1. Classify the change using the rules in Step 9a
 2. Check the review trigger (Step 9b)
-3. If triggered: spawn the `codebase-scribe:scribe-review` skill (NOT code-reviewer or any other plugin) as a fresh-session subagent (Step 9c)
+3. If triggered: invoke the `codebase-scribe:scribe-review` skill using the `Skill` tool (NOT the `Agent` tool, NOT code-reviewer or any other plugin) (Step 9c)
 4. Process the verdict (Step 9d), check human gate (Step 9e), finalize (Step 9f)
 5. If not triggered: present the opt-in prompt to the user
 

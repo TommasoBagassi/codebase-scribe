@@ -67,6 +67,7 @@ Watch specifically for these — they are the most frequent errors in AI-generat
 3. **Behavioral mischaracterization.** The doc says "errors are wrapped with `fmt.Errorf`" but the code actually uses a custom error type. The AI generalized from one instance.
 4. **Confident fabrication.** The doc describes a function signature or parameter that doesn't exist. The AI inferred it from naming conventions rather than reading the actual code.
 5. **Stale cross-references.** The doc links to a file or section that was renamed or removed.
+6. **Changelog language.** The doc says "X was added", "Y now supports Z", "the field was renamed", "formerly", "previously", or "is now X instead of Y". Documentation describes current state only — there is no "before". Flag any of the following phrases as `CONTRADICTION` (the doc contradicts its own purpose as a present-state reference): "was updated", "now supports", "was added", "formerly", "previously", "changed from", "gained a", "was renamed to", "is now".
 
 ## Report Format
 

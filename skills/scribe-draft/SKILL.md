@@ -141,6 +141,8 @@ Also read:
 
 ### 3. Generate Topic File Content
 
+**When updating a drifted topic (not a stub):** You are rewriting sections to match current code — not writing a changelog. Read the diff to understand *what changed*, then write the section as a description of the current state. Do not carry the diff frame into the output. A reader of the finished doc should have no idea whether a section was written fresh or updated.
+
 **Handling migrated topics:** If the topic's frontmatter contains `migration_source` and `migration_sections`, this topic has reference content from an existing AGENTS.md that was preserved during migration:
 
 1. Read the file specified by `migration_source` (e.g., `AGENTS.md` — the original file, untouched by discover)
@@ -196,6 +198,7 @@ what alternatives were considered.]
 - **Every topic MUST start with a blockquote TL;DR** for relevance routing. This is not optional. Example: `> This doc covers the Go backend architecture. For frontend React architecture, see [frontend-architecture.md](frontend-architecture.md).`
 - **Every topic MUST have all 5 sections** (Key Entry Points, Patterns & Conventions, Gotchas, Dependencies & Context, Links). If a section has nothing to say, write one line explaining why (e.g., "No known gotchas for this area yet.") rather than omitting the section.
 - **Concrete over abstract.** Reference actual file paths, function names, commands. "The cache is populated by informers in `cache/kube_cache.go:NewKubeCache()`" not "the cache uses an informer-based approach."
+- **Present state only — no changelog language.** Write what the code *is*, never what it *was* or *changed to*. Forbidden phrases: "was updated", "now supports", "was added", "formerly", "previously", "changed from X to Y", "gained a", "was renamed", "is now". If you are updating a section because the code changed, rewrite the section to describe the current state as if it had always been that way. The git history is the changelog; this doc is not.
 - **Target 200-400 lines.** If content exceeds 500 lines, propose a split to the user.
 - **Over 800 lines:** Hard split -- propose splitting into overview + deep-dive subtopics.
 
@@ -530,7 +533,7 @@ Follow Step 9 (Review Orchestration) from the orchestrator command (`commands/co
 
 1. Classify the change (all topics in this batch are `new_draft` if they had `scan: null`, or check the classification rules in Step 9a)
 2. Check the review trigger (Step 9b)
-3. Spawn the `codebase-scribe:scribe-review` skill (NOT code-reviewer or any other plugin) as a fresh-session subagent for each topic that triggers review (Step 9c)
+3. Invoke the `codebase-scribe:scribe-review` skill using the `Skill` tool (NOT the `Agent` tool, NOT code-reviewer or any other plugin) for each topic that triggers review (Step 9c)
 4. Process the verdict — block+rework for critical findings, annotate for minor (Step 9d)
 5. Check human gate conditions (Step 9e)
 6. Finalize — write review_notes, update scan SHA, regenerate STATUS.md (Step 9f)
